@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -14,6 +14,35 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Fix timeline add behavior
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('app/src/main/java/com/vexora/editor/EditorView.kt')
+          s = p.read_text()
+          old = 'if (y in 610f..730f && x in 200f..850f) { action("add"); return true }'
+          new = 'if (y in 610f..730f && x in 400f..445f) { action("add"); return true }'
+          if old in s:
+              s = s.replace(old, new, 1)
+          old_draw = 'round(c, 788f, 623f, 840f, 715f, 2f, panel2)\n        line(c, 815f, 646f, 815f, 691f, white, 2f); line(c, 793f, 668f, 837f, 668f, white, 2f)'
+          if old_draw in s:
+              s = s.replace(old_draw, '', 1)
+          p.write_text(s)
+
+      - name: Commit source fix
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "No source changes needed"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add app/src/main/java/com/vexora/editor/EditorView.kt
+            git commit -m "Fix timeline add button behavior"
+            git push
+          fi
+
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
