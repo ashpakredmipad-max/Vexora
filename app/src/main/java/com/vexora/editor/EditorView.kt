@@ -13,139 +13,174 @@ import kotlin.math.min
 
 class EditorView(context: Context, private val action: (String) -> Unit) : View(context) {
     private val p = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val density = resources.displayMetrics.density
     private var duration = 3080L
-    private var fileName = ""
-    private var playing = false
     private var hasMedia = false
-    private var selectedTool = "Fit"
-    private var startX = 0f
+    private var playing = false
+    private var selected = -1
 
-    private val bg = Color.rgb(22,22,26)
-    private val panel = Color.rgb(31,32,39)
-    private val muted = Color.rgb(165,166,173)
-    private val white = Color.rgb(245,245,247)
-    private val blue = Color.rgb(30,136,229)
+    private val bg = Color.rgb(20, 20, 24)
+    private val panel = Color.rgb(34, 35, 42)
+    private val panel2 = Color.rgb(39, 40, 48)
+    private val white = Color.rgb(245, 245, 247)
+    private val muted = Color.rgb(160, 161, 168)
+    private val dim = Color.rgb(108, 109, 117)
+    private val blue = Color.rgb(20, 122, 232)
 
-    fun setMedia(ms: Long, name: String) { duration = max(1L, ms); fileName = name; hasMedia = true; invalidate() }
+    private val tools = arrayOf("Filter","Trim","FX","Split","Flow","Cutout","Crop","Rotate","Mirror","Flip","Fit","BG","Border","Blur","Opacity","Zoom","TTS","Mosaic","Magnifier","Stories","Overlay\nTrack")
+
+    fun setMedia(ms: Long) { duration = max(1L, ms); hasMedia = true; invalidate() }
     fun togglePlaying() { playing = !playing; invalidate() }
 
     override fun onDraw(c: Canvas) {
         super.onDraw(c)
         c.drawColor(bg)
-        val w = width.toFloat(); val h = height.toFloat()
-        val top = 0f
-        // top bar
-        p.color = bg; c.drawRect(0f, top, w, d(62), p)
-        text(c, "‹", d(50), d(44), 38f, white, true)
-        circle(c, d(116), d(31), d(11), muted); text(c, "?", d(113), d(36), 13f, white, true)
-        drawSmallScreenIcon(c, d(168), d(31))
-        drawOriginal(c, w/2f, d(31))
-        text(c, "•••", w-d(176), d(38), 20f, white, true)
-        roundRect(c, w-d(137), d(16), w-d(94), d(51), 5f, Color.rgb(53,54,60))
-        drawSave(c, w-d(115), d(33))
-        roundRect(c, w-d(82), d(12), w-d(39), d(55), 6f, blue); drawShare(c,w-d(61),d(33))
+        val sx = width / 1536f
+        val sy = height / 824f
+        c.save(); c.scale(sx, sy)
 
-        // preview frame; transparent if a real VideoView/ImageView is underneath
+        // Top toolbar (reference coordinates are relative to the app content, below status bar).
+        line(c, 58, 27, 47, 38, white, 2.2f); line(c, 47, 38, 58, 49, white, 2.2f)
+        circleStroke(c, 115, 37, 10, white, 1.7f); text(c, "?", 115, 42, 14, white, true, true)
+        // small monitor icon
+        strokeRect(c, 157, 29, 178, 46, white, 1.5f); line(c, 158, 41, 177, 41, white, 1.5f)
+
+        // Original selector
+        strokeRect(c, 723, 27, 739, 43, white, 1.7f); text(c, "Original", 751, 42, 14, white); triangle(c, 808, 35, 814, 35, 811, 41, white)
+        text(c, "•••", 1357, 43, 20, white, true, true)
+        round(c, 1396, 12, 1439, 55, 5, Color.rgb(55,56,63))
+        drawSave(c, 1417, 33)
+        round(c, 1448, 10, 1490, 57, 6, blue); drawShare(c, 1469, 34)
+
+        // Preview placeholder / frame. Real media is placed underneath this view by MainActivity.
         if (!hasMedia) {
-            roundRect(c, w*0.305f, d(70), w*0.695f, d(390), 2f, Color.rgb(238,238,238))
-            text(c, "Add a video or image to start", w/2f, d(235), 18f, Color.DKGRAY, false, true)
+            p.color = Color.rgb(238,238,238); c.drawRect(467, 71, 1068, 431, p)
         }
-        text(c, format(duration), d(10), d(470), 13f, muted)
-        // playback row
-        drawTransport(c, w/2f, d(487))
-        drawAdjust(c, w-d(95), d(487)); drawUndo(c,w-d(55),d(487)); drawUndo(c,w-d(18),d(487),true)
+        // Fullscreen control at preview lower-right.
+        line(c, 1499, 397, 1499, 407, white, 2); line(c, 1499, 397, 1509, 397, white, 2)
+        line(c, 1514, 397, 1514, 407, white, 2); line(c, 1504, 397, 1514, 397, white, 2)
+        line(c, 1499, 421, 1499, 411, white, 2); line(c, 1499, 421, 1509, 421, white, 2)
+        line(c, 1514, 421, 1514, 411, white, 2); line(c, 1504, 421, 1514, 421, white, 2)
 
-        val timelineTop = d(510)
-        // timeline left add rows
-        drawAddRow(c, d(210), timelineTop+d(6), "♪+", "Tap to add music")
-        drawAddRow(c, d(210), timelineTop+d(50), "T+", "Tap to add subtitle")
-        drawAddRow(c, d(210), timelineTop+d(94), "⌁+", "Tap to add sticker / Overlay")
-        text(c, "▣+", d(166), timelineTop+d(154), 23f, muted, true)
-        text(c, "◖", d(178), timelineTop+d(202), 22f, muted, true)
-        roundRect(c, d(78), timelineTop+d(144), d(134), timelineTop+d(200), 2f, Color.rgb(28,29,34), Color.rgb(67,68,74))
-        text(c, "⌁", d(106), timelineTop+d(180), 20f, muted, true)
-        text(c, "Cover", d(105), timelineTop+d(193), 11f, white, false, true)
+        // Thin progress separator.
+        p.color = Color.rgb(91,92,99); c.drawRect(0, 443, 1536, 445, p)
+        text(c, format(duration), 9, 486, 13, muted)
 
-        // main timeline
-        val trackX = d(210); val trackY = timelineTop+d(136); val trackW = min(w-d(520), d(630))
-        roundRect(c, trackX, trackY, trackX+trackW, trackY+d(92), 3f, panel)
-        if (hasMedia) drawClip(c, trackX, trackY, min(trackW-d(14), max(d(210), trackW*0.35f)))
-        else drawPlaceholderClip(c, trackX, trackY)
-        roundRect(c, trackX+trackW-d(2), trackY+d(16), trackX+trackW+d(12), trackY+d(44), 2f, Color.WHITE)
-        text(c, "+", trackX+trackW+d(5), trackY+d(37), 22f, Color.DKGRAY, false, true)
-        text(c, "00:00", trackX, trackY+d(104), 10f, muted)
-        for (i in 1..8) { val x=trackX+d(72*i); text(c, String.format("00:%02d",i), x, trackY+d(104), 10f, muted) }
-        // playhead
-        val ph = if (hasMedia) trackX + trackW*0.89f else trackX + trackW*0.89f
-        p.color = white; c.drawRect(ph, timelineTop+d(1), ph+d(2), trackY+d(110), p)
+        // Transport controls.
+        drawPrev(c, 717, 463); text(c, if (playing) "❚❚" else "▶", 768, 472, 25, white, true, true); drawNext(c, 818, 463)
+        drawSliders(c, 1444, 463); drawUndo(c, 1478, 463, false); drawUndo(c, 1514, 463, true)
 
-        // tool strip
-        val toolsY = h-d(64)
-        p.color = bg; c.drawRect(0f, toolsY-d(12), w, h, p)
-        val labels = arrayOf("Filter","Trim","FX","Split","Flow","Cutout","Crop","Rotate","Mirror","Flip","Fit","BG","Border","Blur","Opacity","Zoom","TTS","Mosaic","Magnifier","Stories","Overlay\nTrack")
-        val glyphs = arrayOf("◉","<>","☆","✂","F","◌","⌗","↻","◫","▱","⊞","▨","□","▒","◉","↗","A","▦","⌕","☷","⌁")
-        val start = d(110); val gap = d(70)
-        labels.forEachIndexed { i, label ->
-            val x = start + i*gap
-            if (x > w-d(20)) return@forEachIndexed
-            text(c, glyphs[i], x, toolsY+d(17), 25f, if (label==selectedTool) white else muted, true, true)
-            text(c, label, x, toolsY+d(43), 11f, if (label==selectedTool) white else muted, false, true)
+        // Timeline track controls.
+        drawMusicRow(c, 211, 491, "Tap to add music")
+        drawTextRow(c, 211, 535, "Tap to add subtitle")
+        drawOverlayRow(c, 211, 579, "Tap to add sticker / Overlay")
+        drawCover(c, 78, 630)
+        drawFilmPlus(c, 174, 632)
+        drawSpeaker(c, 174, 682)
+
+        // Main timeline lane.
+        round(c, 210, 623, 840, 715, 3, panel)
+        if (hasMedia) drawClip(c, 210, 623, 215)
+        else drawPlaceholderClip(c, 210, 623)
+        // Add clip button at end of lane.
+        round(c, 788, 623, 840, 715, 2, panel2)
+        line(c, 815, 646, 815, 691, white, 2); line(c, 793, 668, 837, 668, white, 2)
+        // time ruler
+        for (i in 0..8) text(c, String.format("00:%02d", i), 210 + i * 72, 737, 10, muted)
+        // vertical playhead
+        p.color = white; c.drawRect(767, 486, 770, 740, p)
+
+        // Bottom tools.
+        p.color = bg; c.drawRect(0, 747, 1536, 824, p)
+        val start = 110f; val gap = 70f
+        for (i in tools.indices) {
+            val x = start + i * gap
+            if (x > 1515) break
+            drawTool(c, x, 774, tools[i], i == selected)
         }
-        // current selection marker
-        p.color = white; c.drawRect(start + labels.indexOf(selectedTool)*gap-d(18), h-d(9), start + labels.indexOf(selectedTool)*gap+d(18), h-d(7), p)
+
+        c.restore()
     }
 
-    private fun drawAddRow(c: Canvas, x: Float, y: Float, icon: String, label: String) {
-        text(c, icon, x-d(45), y+d(24), 23f, muted, true, true)
-        roundRect(c, x, y, x+d(214), y+d(36), 3f, panel)
-        text(c, label, x+d(12), y+d(23), 13f, Color.rgb(130,131,139))
+    private fun drawMusicRow(c: Canvas, x: Int, y: Int, label: String) {
+        drawMusicIcon(c, x-44, y+18); round(c,x,y,x+213,y+36,3,panel); text(c,label,x+12,y+24,13,Color.rgb(128,129,137))
     }
+    private fun drawTextRow(c: Canvas, x: Int, y: Int, label: String) {
+        drawTextIcon(c,x-44,y+18); round(c,x,y,x+213,y+36,3,panel); text(c,label,x+12,y+24,13,Color.rgb(128,129,137))
+    }
+    private fun drawOverlayRow(c: Canvas, x: Int, y: Int, label: String) {
+        drawImageIcon(c,x-44,y+18); round(c,x,y,x+213,y+36,3,panel); text(c,label,x+12,y+24,13,Color.rgb(128,129,137))
+    }
+    private fun drawCover(c: Canvas,x:Int,y:Int){strokeRect(c,x,y,x+56,y+56,Color.rgb(67,68,74),1); line(c,x+15,y+45,x+25,y+29,muted,1.5f); line(c,x+25,y+29,x+34,y+39,muted,1.5f); line(c,x+34,y+39,x+43,y+25,muted,1.5f); text(c,"Cover",x+28,y+74,11,white,false,true)}
+    private fun drawFilmPlus(c:Canvas,x:Int,y:Int){round(c,x-11,y-11,x+11,y+11,2,Color.TRANSPARENT,muted); for(i in -7..7 step 7) line(c,x+i,y-9,x+i,y+9,muted,1); text(c,"+",x+11,y+6,17,white,true,true)}
+    private fun drawSpeaker(c:Canvas,x:Int,y:Int){p.color=muted;val path=Path();path.moveTo(x-10f,y-4f);path.lineTo(x-4f,y-4f);path.lineTo(x+4f,y-11f);path.lineTo(x+4f,y+11f);path.lineTo(x-4f,y+4f);path.lineTo(x-10f,y+4f);path.close();c.drawPath(path,p);line(c,x+8,y-8,x+14,y+8,muted,2)}
+    private fun drawClip(c:Canvas,x:Int,y:Int,w:Int){round(c,x,y,x+w,y+62,2,Color.rgb(42,43,49));for(i in 0..3){val l=x+i*w/4f;r(l+2,y+3,l+w/4f-2,y+59,Color.rgb(205,205,208));line(c,l+8,y+14,l+w/4f-8,y+14,Color.rgb(145,145,150),1);line(c,l+8,y+24,l+w/4f-22,y+24,Color.rgb(110,110,116),1)} }
+    private fun drawPlaceholderClip(c:Canvas,x:Int,y:Int){round(c,x,y,x+215,y+62,2,Color.rgb(55,56,62));text(c,"Tap + to add media",x+107,y+38,13,muted,false,true)}
 
-    private fun drawClip(c: Canvas, x: Float, y: Float, width: Float) {
-        roundRect(c,x,y,x+width,y+d(62),2f,Color.rgb(41,42,48))
-        val cells = 4
-        for (i in 0 until cells) {
-            val xx=x+i*width/cells
-            p.color=Color.rgb(205,205,208); c.drawRect(xx+d(2),y+d(3),xx+width/cells-d(2),y+d(59),p)
-            // thumbnail-like lines
-            p.color=Color.rgb(160,160,165); c.drawRect(xx+d(7),y+d(10),xx+width/cells-d(7),y+d(12),p)
-            p.color=Color.rgb(100,100,105); c.drawRect(xx+d(7),y+d(18),xx+width/cells-d(18),y+d(20),p)
+    private fun drawTool(c:Canvas,x:Float,y:Float,label:String,active:Boolean){
+        val iconColor=if(active)white else muted
+        when(label.substringBefore('\n')){
+            "Filter"->drawFilter(c,x,y,iconColor); "Trim"->drawTrim(c,x,y,iconColor); "FX"->text(c,"☆",x,y+8,31,iconColor,true,true); "Split"->drawScissors(c,x,y,iconColor); "Flow"->drawSquareF(c,x,y,iconColor); "Cutout"->drawCutout(c,x,y,iconColor); "Crop"->drawCrop(c,x,y,iconColor); "Rotate"->text(c,"↻",x,y+8,29,iconColor,true,true); "Mirror"->drawMirror(c,x,y,iconColor); "Flip"->drawFlip(c,x,y,iconColor); "Fit"->drawFit(c,x,y,iconColor); "BG"->drawBg(c,x,y,iconColor); "Border"->drawBorder(c,x,y,iconColor); "Blur"->drawBlur(c,x,y,iconColor); "Opacity"->drawOpacity(c,x,y,iconColor); "Zoom"->drawZoom(c,x,y,iconColor); "TTS"->drawTts(c,x,y,iconColor); "Mosaic"->drawMosaic(c,x,y,iconColor); "Magnifier"->drawMagnifier(c,x,y,iconColor); "Stories"->drawStories(c,x,y,iconColor); else->drawOverlayTrack(c,x,y,iconColor)
         }
-        p.color=Color.WHITE; c.drawRect(x+width-d(3),y-d(2),x+width+d(3),y+d(64),p)
-    }
-    private fun drawPlaceholderClip(c: Canvas, x: Float, y: Float) {
-        roundRect(c,x,y,x+d(210),y+d(62),2f,Color.rgb(55,56,62)); text(c,"Tap + to add media",x+d(105),y+d(38),13f,muted,false,true)
+        text(c,label,x,y+37,11,iconColor,false,true)
     }
 
-    private fun drawTransport(c: Canvas,x:Float,y:Float){ text(c,"|◀",x-d(54),y+d(8),20f,muted,true,true); text(c,if(playing)"❚❚" else "▶",x,y+d(9),25f,white,true,true); text(c,"▶|",x+d(45),y+d(8),20f,muted,true,true) }
-    private fun drawAdjust(c:Canvas,x:Float,y:Float){text(c,"☷",x,y+d(8),23f,white,true,true)}
-    private fun drawUndo(c:Canvas,x:Float,y:Float,redo:Boolean=false){text(c,if(redo)"↷" else "↶",x,y+d(7),28f,if(redo)muted else white,true,true)}
-    private fun drawSmallScreenIcon(c:Canvas,x:Float,y:Float){roundRect(c,x-d(11),y-d(7),x+d(11),y+d(8),1f,Color.TRANSPARENT,muted);c.drawLine(x-d(8),y+d(4),x+d(8),y+d(4),p)}
-    private fun drawOriginal(c:Canvas,x:Float,y:Float){roundRect(c,x-d(8),y-d(8),x+d(8),y+d(8),2f,Color.TRANSPARENT,white);text(c,"Original⌄",x+d(22),y+d(5),14f,white,false,true)}
-    private fun drawSave(c:Canvas,x:Float,y:Float){roundRect(c,x-d(8),y-d(9),x+d(8),y+d(9),2f,Color.TRANSPARENT,white);c.drawRect(x-d(5),y-d(7),x+d(5),y-d(2),p);c.drawRect(x-d(4),y+d(3),x+d(4),y+d(7),p)}
-    private fun drawShare(c:Canvas,x:Float,y:Float){p.color=white;c.drawLine(x,y+d(7),x,y-d(8),p);c.drawLine(x,y-d(8),x-d(6),y-d(2),p);c.drawLine(x,y-d(8),x+d(6),y-d(2),p);c.drawLine(x-d(8),y+d(3),x-d(8),y+d(9),p);c.drawLine(x-d(8),y+d(9),x+d(8),y+d(9),p);c.drawLine(x+d(8),y+d(9),x+d(8),y+d(3),p)}
-    private fun circle(c:Canvas,x:Float,y:Float,r:Float,color:Int){p.color=color;p.style=Paint.Style.STROKE;p.strokeWidth=d(2);c.drawCircle(x,y,r,p);p.style=Paint.Style.FILL}
-    private fun roundRect(c:Canvas,l:Float,t:Float,r:Float,b:Float,rad:Float,color:Int,border:Int?=null){p.color=color;p.style=Paint.Style.FILL;c.drawRoundRect(RectF(l,t,r,b),d(rad),d(rad),p);if(border!=null){p.color=border;p.style=Paint.Style.STROKE;p.strokeWidth=d(1);c.drawRoundRect(RectF(l,t,r,b),d(rad),d(rad),p);p.style=Paint.Style.FILL}}
-    private fun text(c:Canvas,s:String,x:Float,y:Float,size:Float,color:Int,bold:Boolean=false,center:Boolean=false){p.color=color;p.textSize=d(size);p.typeface=if(bold)android.graphics.Typeface.DEFAULT_BOLD else android.graphics.Typeface.DEFAULT;p.textAlign=if(center)Paint.Align.CENTER else Paint.Align.LEFT;c.drawText(s,x,y,p)}
-    private fun d(v:Int)=v*density
-    private fun d(v:Float)=v*density
+    // Small line icons intentionally drawn rather than using platform fonts so they stay visually consistent.
+    private fun drawFilter(c:Canvas,x:Float,y:Float,col:Int){circleStroke(c,x,y,12,col,2);circleStroke(c,x,y,6,col,2);circle(c,x,y,2,col)}
+    private fun drawTrim(c:Canvas,x:Float,y:Float,col:Int){strokeRect(c,x-12,y-10,x+12,y+10,col,2);line(c,x-3,y-10,x-3,y+10,col,2);line(c,x+3,y-10,x+3,y+10,col,2)}
+    private fun drawScissors(c:Canvas,x:Float,y:Float,col:Int){line(c,x-11,y-9,x+11,y+10,col,2);line(c,x-11,y+9,x+11,y-10,col,2);circleStroke(c,x-11,y-9,3,col,2);circleStroke(c,x-11,y+9,3,col,2)}
+    private fun drawSquareF(c:Canvas,x:Float,y:Float,col:Int){strokeRect(c,x-12,y-12,x+12,y+12,col,2);text(c,"F",x,y+8,18,col,true,true)}
+    private fun drawCutout(c:Canvas,x:Float,y:Float,col:Int){circleStroke(c,x,y,12,col,2);circleStroke(c,x,y,5,col,2);line(c,x+8,y-9,x+13,y-14,col,2)}
+    private fun drawCrop(c:Canvas,x:Float,y:Float,col:Int){line(c,x-11,y-2,x-2,y-2,col,2);line(c,x-2,y-2,x-2,y-11,col,2);line(c,x+11,y+2,x+2,y+2,col,2);line(c,x+2,y+2,x+2,y+11,col,2)}
+    private fun drawMirror(c:Canvas,x:Float,y:Float,col:Int){line(c,x,y-13,x,y+13,col,2);strokeRect(c,x-12,y-9,x-3,y+9,col,1.5f);strokeRect(c,x+3,y-9,x+12,y+9,col,1.5f)}
+    private fun drawFlip(c:Canvas,x:Float,y:Float,col:Int){strokeRect(c,x-12,y-8,x+12,y+8,col,1.5f);line(c,x,y-10,x,y+10,col,2)}
+    private fun drawFit(c:Canvas,x:Float,y:Float,col:Int){strokeRect(c,x-10,y-10,x+10,y+10,col,2);line(c,x-5,y,x+5,y,col,2);line(c,x,y-5,x,y+5,col,2)}
+    private fun drawBg(c:Canvas,x:Float,y:Float,col:Int){round(c,x-11,y-11,x+11,y+11,3,Color.TRANSPARENT,col);line(c,x-6,y-6,x+6,y+6,col,2);line(c,x+6,y-6,x-6,y+6,col,2)}
+    private fun drawBorder(c:Canvas,x:Float,y:Float,col:Int){strokeRect(c,x-11,y-11,x+11,y+11,col,2);strokeRect(c,x-6,y-6,x+6,y+6,col,1.3f)}
+    private fun drawBlur(c:Canvas,x:Float,y:Float,col:Int){for(i in -1..1) for(j in -1..1) c.drawCircle(x+i*7,y+j*7,3,p.apply{color=col})}
+    private fun drawOpacity(c:Canvas,x:Float,y:Float,col:Int){circleStroke(c,x,y,11,col,2);text(c,"½",x,y+7,16,col,true,true)}
+    private fun drawZoom(c:Canvas,x:Float,y:Float,col:Int){circleStroke(c,x-3,y-3,8,col,2);line(c,x+3,y+3,x+12,y+12,col,2)}
+    private fun drawTts(c:Canvas,x:Float,y:Float,col:Int){strokeRect(c,x-12,y-10,x+12,y+10,col,2);text(c,"A",x,y+6,13,col,true,true)}
+    private fun drawMosaic(c:Canvas,x:Float,y:Float,col:Int){for(i in -1..1)for(j in -1..1)round(c,x+i*8-3,y+j*8-3,x+i*8+3,y+j*8+3,1,Color.TRANSPARENT,col)}
+    private fun drawMagnifier(c:Canvas,x:Float,y:Float,col:Int){circleStroke(c,x-2,y-2,8,col,2);line(c,x+4,y+4,x+12,y+12,col,2);text(c,"+",x-2,y+3,10,col,true,true)}
+    private fun drawStories(c:Canvas,x:Float,y:Float,col:Int){strokeRect(c,x-10,y-10,x+10,y+10,col,2);line(c,x-6,y-3,x+6,y-3,col,1.5f);line(c,x-6,y+2,x+6,y+2,col,1.5f)}
+    private fun drawOverlayTrack(c:Canvas,x:Float,y:Float,col:Int){for(i in -1..1)for(j in -1..1)c.drawRect(x+i*8-3,y+j*8-3,x+i*8+3,y+j*8+3,p.apply{color=col})}
+
+    private fun drawMusicIcon(c:Canvas,x:Float,y:Float){text(c,"♫",x,y+8,28,muted,true,true);text(c,"+",x+12,y+8,18,white,true,true)}
+    private fun drawTextIcon(c:Canvas,x:Float,y:Float){round(c,x-10,y-11,x+10,y+10,2,Color.TRANSPARENT,muted);text(c,"T",x,y+7,18,muted,true,true);text(c,"+",x+13,y+9,18,white,true,true)}
+    private fun drawImageIcon(c:Canvas,x:Float,y:Float){strokeRect(c,x-11,y-9,x+11,y+8,muted,1.8f);circle(c,x-4,y-3,2,muted);line(c,x-9,y+6,x-2,y,x+4,y+5,x+10,y-1,muted,1.7f);text(c,"+",x+14,y+9,18,white,true,true)}
+
+    private fun drawPrev(c:Canvas,x:Float,y:Float){line(c,x-6,y,x-6,y+13,muted,2);Path().also{it.moveTo(x+6f,y);it.lineTo(x-5f,y+6f);it.lineTo(x+6f,y+13);it.close();p.color=muted;c.drawPath(it,p)}}
+    private fun drawNext(c:Canvas,x:Float,y:Float){line(c,x+6,y,x+6,y+13,muted,2);Path().also{it.moveTo(x-6f,y);it.lineTo(x+5f,y+6f);it.lineTo(x-6f,y+13);it.close();p.color=muted;c.drawPath(it,p)}}
+    private fun drawSliders(c:Canvas,x:Float,y:Float){line(c,x-9,y,x+9,y,white,1.7f);line(c,x-9,y+8,x+9,y+8,white,1.7f);circle(c,x+2,y,3,white);circle(c,x-3,y+8,3,white)}
+    private fun drawUndo(c:Canvas,x:Float,y:Float,redo:Boolean){text(c,if(redo)"↷" else "↶",x,y+12,29,if(redo)dim:white,true,true)}
+    private fun drawSave(c:Canvas,x:Float,y:Float){strokeRect(c,x-9,y-9,x+9,y+9,white,1.8f);c.drawRect(x-5,y-7,x+5,y-2,p.apply{color=white});strokeRect(c,x-4,y+2,x+4,y+7,white,1)}
+    private fun drawShare(c:Canvas,x:Float,y:Float){line(c,x,y+8,x,y-8,white,2);line(c,x,y-8,x-6,y-2,white,2);line(c,x,y-8,x+6,y-2,white,2);line(c,x-9,y+2,x-9,y+9,white,2);line(c,x-9,y+9,x+9,y+9,white,2);line(c,x+9,y+9,x+9,y+2,white,2)}
+
+    private fun round(c:Canvas,l:Float,t:Float,r:Float,b:Float,rad:Float,col:Int,border:Int?=null){p.style=Paint.Style.FILL;p.color=col;c.drawRoundRect(RectF(l,t,r,b),rad,rad,p);if(border!=null){p.style=Paint.Style.STROKE;p.strokeWidth=1f;p.color=border;c.drawRoundRect(RectF(l,t,r,b),rad,rad,p);p.style=Paint.Style.FILL}}
+    private fun strokeRect(c:Canvas,l:Float,t:Float,r:Float,b:Float,col:Int,sw:Float){p.style=Paint.Style.STROKE;p.strokeWidth=sw;p.color=col;c.drawRect(l,t,r,b,p);p.style=Paint.Style.FILL}
+    private fun circle(c:Canvas,x:Float,y:Float,r:Float,col:Int){p.color=col;p.style=Paint.Style.FILL;c.drawCircle(x,y,r,p)}
+    private fun circleStroke(c:Canvas,x:Float,y:Float,r:Float,col:Int,sw:Float){p.color=col;p.style=Paint.Style.STROKE;p.strokeWidth=sw;c.drawCircle(x,y,r,p);p.style=Paint.Style.FILL}
+    private fun line(c:Canvas,vararg a:Any){val x1=a[0] as Float;val y1=a[1] as Float;val x2=a[2] as Float;val y2=a[3] as Float;val col=a[4] as Int;val sw=a[5] as Float;p.color=col;p.strokeWidth=sw;p.style=Paint.Style.STROKE;c.drawLine(x1,y1,x2,y2,p);p.style=Paint.Style.FILL}
+    private fun line(c:Canvas,x1:Int,y1:Int,x2:Int,y2:Int,col:Int,sw:Float){p.color=col;p.strokeWidth=sw;p.style=Paint.Style.STROKE;c.drawLine(x1.toFloat(),y1.toFloat(),x2.toFloat(),y2.toFloat(),p);p.style=Paint.Style.FILL}
+    private fun line(c:Canvas,x1:Float,y1:Float,x2:Float,y2:Float,x3:Float,y3:Float,x4:Float,y4:Float,col:Int,sw:Float){line(c,x1,y1,x2,y2,col,sw);line(c,x2,y2,x3,y3,col,sw);line(c,x3,y3,x4,y4,col,sw)}
+    private fun text(c:Canvas,s:String,x:Float,y:Float,size:Float,col:Int,bold:Boolean=false,center:Boolean=false){p.style=Paint.Style.FILL;p.color=col;p.textSize=size;p.typeface=if(bold)android.graphics.Typeface.DEFAULT_BOLD else android.graphics.Typeface.DEFAULT;p.textAlign=if(center)Paint.Align.CENTER else Paint.Align.LEFT;c.drawText(s,x,y,p)}
+    private fun triangle(c:Canvas,x1:Float,y1:Float,x2:Float,y2:Float,x3:Float,y3:Float,col:Int){p.color=col;p.style=Paint.Style.FILL;Path().also{it.moveTo(x1,y1);it.lineTo(x2,y2);it.lineTo(x3,y3);it.close();c.drawPath(it,p)}}
     private fun format(ms:Long):String=String.format("%d.%02d / %d.%02d",ms/1000,(ms%1000)/10,ms/1000,(ms%1000)/10)
 
     override fun onTouchEvent(e: MotionEvent): Boolean {
-        if(e.action==MotionEvent.ACTION_DOWN){startX=e.x;return true}
-        if(e.action!=MotionEvent.ACTION_UP)return true
-        val y=e.y; val x=e.x; val h=height.toFloat(); val w=width.toFloat()
-        if(y<d(70) && x>w-d(95)){ action("export"); return true }
-        if(y in d(455)..d(515) && x in w/2-d(45)..w/2+d(45)){action("play");return true}
-        if(y in d(510)..d(720) && x in d(390)..d(880)){action("add");return true}
-        if(y>h-d(82)){
-            val idx=((x-d(110))/d(70)).toInt()
-            val names=arrayOf("Filter","Trim","FX","Split","Flow","Cutout","Crop","Rotate","Mirror","Flip","Fit","BG","Border","Blur","Opacity","Zoom","TTS","Mosaic","Magnifier","Stories","Overlay Track")
-            if(idx in names.indices){selectedTool=names[idx];action(names[idx]) ;invalidate()}
+        if(e.action != MotionEvent.ACTION_UP) return true
+        val sx = 1536f / width; val sy = 824f / height
+        val x=e.x*sx; val y=e.y*sy
+        if(y<65 && x>1435){action("export");return true}
+        if(y in 445f..500f && x in 735f..800f){action("play");return true}
+        if(y in 615f..725f && x in 195f..855f){action("add");return true}
+        if(y in 485f..625f && x<450f){
+            when { y<530 -> action("music"); y<575 -> action("subtitle"); else -> action("overlay") }
             return true
         }
-        if(y in d(510)..d(660) && x<d(450)){ action(if(y<d(575))"music" else if(y<d(620))"subtitle" else "overlay");return true }
+        if(y>745){
+            val idx=((x-110)/70).toInt(); if(idx in tools.indices){selected=idx;action(tools[idx].replace("\n"," "));invalidate()};return true
+        }
         return true
     }
 }
