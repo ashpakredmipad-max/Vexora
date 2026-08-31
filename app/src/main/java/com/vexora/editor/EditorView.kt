@@ -64,8 +64,7 @@ class EditorView(context: Context, private val action: (String) -> Unit) : View(
         // Main lane
         round(c, 210f, 623f, 840f, 715f, 3f, panel)
         if (hasMedia) drawClip(c, 210f, 623f, 215f) else drawPlaceholderClip(c, 210f, 623f)
-        round(c, 788f, 623f, 840f, 715f, 2f, panel2)
-        line(c, 815f, 646f, 815f, 691f, white, 2f); line(c, 793f, 668f, 837f, 668f, white, 2f)
+        
         for (i in 0..8) text(c, String.format("00:%02d", i), 210f + i * 72f, 737f, 10f, muted)
         p.color = white; c.drawRect(767f, 486f, 770f, 740f, p)
 
@@ -140,7 +139,7 @@ class EditorView(context: Context, private val action: (String) -> Unit) : View(
         val x = e.x / sx; val y = e.y / sy
         if (y < 70f && x > 1440f) { action("export"); return true }
         if (y in 440f..500f && x in 730f..805f) { action("play"); return true }
-        if (y in 610f..730f && x in 200f..850f) { action("add"); return true }
+        if (y in 610f..730f && x in 400f..445f) { action("add"); return true }
         if (y in 485f..525f && x < 450f) { action("music"); return true }
         if (y in 525f..570f && x < 450f) { action("subtitle"); return true }
         if (y in 570f..615f && x < 450f) { action("overlay"); return true }
